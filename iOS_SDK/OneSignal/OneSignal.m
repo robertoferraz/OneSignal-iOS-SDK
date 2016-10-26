@@ -230,7 +230,6 @@ BOOL mSubscriptionSet;
     
     if (NSClassFromString(@"UNUserNotificationCenter")) {
         #if XC8_AVAILABLE
-        [OneSignalHelper registerAsUNNotificationCenterDelegate];
         [OneSignalHelper clearCachedMedia];
         #endif
     }
@@ -1275,8 +1274,17 @@ static Class getClassWithProtocolInHierarchy(Class searchClass, Protocol* protoc
 static void injectSelector(Class newClass, SEL newSel, Class addToClass, SEL makeLikeSel) {
     Method newMeth = class_getInstanceMethod(newClass, newSel);
     IMP imp = method_getImplementation(newMeth);
+    
+    NSLog(@"newClass: %@", newClass);
+    NSLog(@"newSel: %@", NSStringFromSelector(newSel));
+    NSLog(@"newMeth: %d", newMeth == nil);
+    NSLog(@"imp: %d", imp == nil);
+    
     const char* methodTypeEncoding = method_getTypeEncoding(newMeth);
+    NSLog(@"methodTypeEncoding: %s", methodTypeEncoding);
     BOOL successful = class_addMethod(addToClass, makeLikeSel, imp, methodTypeEncoding);
+    
+    NSLog(@"injectSelector: %d", successful);
     
     if (!successful) {
         class_addMethod(addToClass, newSel, imp, methodTypeEncoding);
@@ -1299,6 +1307,8 @@ static void injectToProperClass(SEL newSel, SEL makeLikeSel, NSArray* delegateSu
             injectSelector(myClass, newSel, subclass, makeLikeSel);
             return;
         }
+    
+    NSLog(@"HERE!!!!!, %@", NSStringFromSelector(newSel));
     
     //No subclass overrides the method, try to inject in delegate class
     injectSelector(myClass, newSel, delegateClass, makeLikeSel);
@@ -1328,6 +1338,48 @@ static NSArray* ClassGetSubclasses(Class parentClass) {
     
     return result;
 }
+
+
+
+@interface sizzleUNUserNotif : NSObject
+
+@end
+
+@implementation sizzleUNUserNotif
+
+static Class delegateUNClass = nil;
+
+// Store an array of all UIAppDelegate subclasses to iterate over in cases where UIAppDelegate swizzled methods are not overriden in main AppDelegate
+//But rather in one of the subclasses
+static NSArray* delegateUNSubclasses = nil;
+
+- (void) setOneSignalUNDelegate:(id)delegate {
+   /* if (delegateUNClass) {
+        [self setOneSignalUNDelegate:delegate];
+        return;
+    }*/
+    
+    delegateUNClass = getClassWithProtocolInHierarchy([delegate class], @protocol(UNUserNotificationCenterDelegate));
+    delegateUNSubclasses = ClassGetSubclasses(delegateUNClass);
+    
+    injectToProperClass(@selector(onesignalUserNotificationCenter:willPresentNotification:withCompletionHandler:),
+                        @selector(userNotificationCenter:willPresentNotification:withCompletionHandler:), delegateUNSubclasses, [sizzleUNUserNotif class], delegateUNClass);
+    
+    [self setOneSignalUNDelegate:delegate];
+}
+
+- (void)onesignalUserNotificationCenter:(UNUserNotificationCenter *)center
+       willPresentNotification:(UNNotification *)notification
+         withCompletionHandler:(void (^)(UNNotificationPresentationOptions options))completionHandler {
+    NSLog(@"Will present NOTIFICATIION!!!!");
+    
+    if ([self respondsToSelector:@selector(onesignalUserNotificationCenter:willPresentNotification:withCompletionHandler:)])
+        [self onesignalUserNotificationCenter:center willPresentNotification:notification withCompletionHandler:completionHandler];
+}
+
+@end
+
+
 
 @interface OneSignalTracker ()
 + (void)onFocus:(BOOL)toBackground;
@@ -1481,6 +1533,21 @@ static NSArray* delegateSubclasses = nil;
     
     //Swizzle App delegate
     method_exchangeImplementations(class_getInstanceMethod(self, @selector(setDelegate:)), class_getInstanceMethod(self, @selector(setOneSignalDelegate:)));
+    
+    
+    Class clasz = NSClassFromString(@"UNUserNotificationCenter");
+    if (!clasz) {
+        NSLog(@"NO UNUserNotificationCenter CLASS");
+        return;
+    }
+    
+    // UNUserNotificationCenter delegate:
+    //method_exchangeImplementations(class_getInstanceMethod(class, @selector(setDelegate:)), class_getInstanceMethod([sizzleUNUserNotif class], @selector(setOneSignalUNDelegate:)));
+    
+    injectToProperClass(@selector(setOneSignalUNDelegate:),
+                        @selector(setDelegate:), @[], [sizzleUNUserNotif class], clasz);
+    
+    [OneSignalHelper registerAsUNNotificationCenterDelegate];
 }
 
 - (void) setOneSignalDelegate:(id<UIApplicationDelegate>)delegate {
@@ -1554,6 +1621,25 @@ static NSArray* delegateSubclasses = nil;
 }
 
 @end
+
+
+//#import <UserNotifications/UserNotifications.h>
+
+//@interface UNUserNotificationCenter : NSObject
+//@end
+/*
+#if XC8_AVAILABLE
+@implementation UNUserNotificationCenter (Swizzling)
++ (void)load {
+    NSLog(@"UNUserNotificationCenter(Swizzling) Loaded!!!!!!");
+    
+    //Swizzle App delegate
+    //method_exchangeImplementations(class_getInstanceMethod(self, @selector(setDelegate:)), class_getInstanceMethod(self, @selector(setOneSignalDelegate:)));
+}
+@end
+#endif */
+
+
 
 #pragma clang diagnostic pop
 #pragma clang diagnostic pop

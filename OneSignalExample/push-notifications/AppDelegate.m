@@ -28,13 +28,14 @@
 #import "AppDelegate.h"
 #import <OneSignal/OneSignal.h>
 
-#if __IPHONE_OS_VERSION_MAX_ALLOWED >= 100000
-    #import <UserNotifications/UserNotifications.h>
-#endif
-
 @implementation AppDelegate
 
 - (BOOL)application:(UIApplication*)application didFinishLaunchingWithOptions:(NSDictionary*)launchOptions {
+    
+    UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
+    
+    // TODO: Test before;
+    // center.delegate = self;
     
     // Eanble logging to help debug issues. visualLevel will show alert dialog boxes.
     [OneSignal setLogLevel:ONE_S_LL_INFO visualLevel:ONE_S_LL_INFO];
@@ -74,6 +75,9 @@
         }
     }];
     
+    // TODO: Test After;
+    // center.delegate = self;
+    
     /*
     // iOS 10 ONLY - Add category for the OSContentExtension
     // Make sure to add UserNotifications framework in the Linked Frameworks & Libraries.
@@ -92,6 +96,13 @@
     */
     
     return YES;
+}
+
+- (void)userNotificationCenter:(UNUserNotificationCenter *)center
+       willPresentNotification:(UNNotification *)notification  withCompletionHandler:(void (^)(UNNotificationPresentationOptions options))completionHandler{
+    NSLog( @"for handling push in foreground" );
+    // Your code
+    NSLog(@"%@", notification.request.content.userInfo); //for getting response payload data
 }
 
 @end

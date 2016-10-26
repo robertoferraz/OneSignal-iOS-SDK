@@ -487,10 +487,12 @@ static OneSignal* singleInstance = nil;
 }
 
 + (void)registerAsUNNotificationCenterDelegate {
+    Class UNNofiCenterClass = NSClassFromString(@"UNUserNotificationCenter");
+    if (!UNNofiCenterClass) return;
     
-    if(!NSClassFromString(@"UNUserNotificationCenter")) return;
-    [NSClassFromString(@"UNUserNotificationCenter") currentNotificationCenter].delegate = [self sharedInstance];
-    
+    UNUserNotificationCenter *curNotifCenter = [UNNofiCenterClass currentNotificationCenter];
+    if (!curNotifCenter.delegate)
+        curNotifCenter.delegate = [self sharedInstance];
 }
 
 + (id)prepareUNNotificationRequest:(NSDictionary *)data :(NSDictionary *)userInfo {
